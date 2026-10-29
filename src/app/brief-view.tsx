@@ -1,133 +1,55 @@
-"use client";
+import type { Brief, NewsItem, StockQuote, Weather } from "@/lib/daily-brief/types";
 
-import { useCallback, useEffect, useState } from "react";
-import type {
-  DailyBriefResponse,
-  NewsItem,
-  StockQuote,
-  Weather,
-} from "@/lib/daily-brief/types";
-
-const ERROR_LABELS: Record<string, string> = {
-  weather: "天氣",
-  stock: "股價",
-  news: "新聞",
-  summary: "AI 統整",
-};
-
-async function fetchBrief(): Promise<DailyBriefResponse> {
-  const res = await fetch("/api/daily-brief", { cache: "no-store" });
-  if (!res.ok) throw new Error(`API 回應 ${res.status}`);
-  return res.json();
-}
-
-export default function DailyBrief() {
-  const [data, setData] = useState<DailyBriefResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const applyResult = useCallback((request: Promise<DailyBriefResponse>) => {
-    request
-      .then((result) => {
-        setData(result);
-        setError(null);
-      })
-      .catch((e) => setError(e instanceof Error ? e.message : String(e)))
-      .finally(() => setLoading(false));
-  }, []);
-
-  useEffect(() => {
-    applyResult(fetchBrief());
-  }, [applyResult]);
-
-  const load = () => {
-    setLoading(true);
-    applyResult(fetchBrief());
-  };
-
+/** 一份晨報的完整內容：鼓勵的話、天氣、股價、科技重點與新聞列表 */
+export function BriefView({
+  weather,
+  stock,
+  news,
+  summary,
+}: {
+  weather: Weather | null;
+  stock: StockQuote | null;
+  news: NewsItem[];
+  summary: Brief | null;
+}) {
   return (
-    <main className="mx-auto w-full max-w-5xl px-4 py-10 sm:px-6">
-      <header className="mb-8 flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="text-sm font-medium text-zinc-500 dark:text-zinc-400">
-            {data ? formatDate(data.date) : "今天"}
+    <div className="space-y-6">
+      {summary && (
+        <section className="rounded-2xl bg-gradient-to-br from-amber-100 to-rose-100 p-6 dark:from-amber-950 dark:to-rose-950">
+          <h2 className="text-sm font-semibold text-amber-800 dark:text-amber-300">
+            ☀️ 給今天的你
+          </h2>
+          <p className="mt-3 text-lg leading-relaxed text-zinc-800 dark:text-zinc-100">
+            {summary.encouragement}
           </p>
-          <h1 className="mt-1 text-3xl font-bold tracking-tight">每日晨報</h1>
-        </div>
-        <button
-          onClick={load}
-          disabled={loading}
-          className="rounded-full border border-zinc-300 px-4 py-2 text-sm font-medium transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-700 dark:hover:bg-zinc-800"
-        >
-          {loading ? "整理中…" : "重新整理"}
-        </button>
-      </header>
-
-      {error && (
-        <div className="mb-6 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300">
-          載入失敗：{error}
-        </div>
+        </section>
       )}
 
-      {data && Object.keys(data.errors).length > 0 && (
-        <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300">
-          <p className="font-medium">部分資料取得失敗：</p>
-          <ul className="mt-1 list-inside list-disc">
-            {Object.entries(data.errors).map(([key, message]) => (
-              <li key={key}>
-                {ERROR_LABELS[key] ?? key}：{message}
+      <div className="grid gap-6 md:grid-cols-2">
+        <WeatherCard weather={weather} summary={summary?.weatherSummary} />
+        <StockCard stock={stock} summary={summary?.stockSummary} />
+      </div>
+
+      {summary && summary.newsHighlights.length > 0 && (
+        <Card title="📰 今日科技重點">
+          <ol className="space-y-4">
+            {summary.newsHighlights.map((item, i) => (
+              <li key={item.title} className="flex gap-3">
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-zinc-900 text-xs font-bold text-white dark:bg-zinc-100 dark:text-zinc-900">
+                  {i + 1}
+                </span>
+                <div>
+                  <p className="font-semibold">{item.title}</p>
+                  <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">{item.summary}</p>
+                </div>
               </li>
             ))}
-          </ul>
-        </div>
+          </ol>
+        </Card>
       )}
 
-      {loading && !data ? (
-        <LoadingSkeleton />
-      ) : (
-        data && (
-          <div className={`space-y-6 transition-opacity ${loading ? "opacity-50" : ""}`}>
-            {data.summary && (
-              <section className="rounded-2xl bg-gradient-to-br from-amber-100 to-rose-100 p-6 dark:from-amber-950 dark:to-rose-950">
-                <h2 className="text-sm font-semibold text-amber-800 dark:text-amber-300">
-                  ☀️ 給今天的你
-                </h2>
-                <p className="mt-3 text-lg leading-relaxed text-zinc-800 dark:text-zinc-100">
-                  {data.summary.encouragement}
-                </p>
-              </section>
-            )}
-
-            <div className="grid gap-6 md:grid-cols-2">
-              <WeatherCard weather={data.weather} summary={data.summary?.weatherSummary} />
-              <StockCard stock={data.stock} summary={data.summary?.stockSummary} />
-            </div>
-
-            {data.summary && data.summary.newsHighlights.length > 0 && (
-              <Card title="📰 今日科技重點">
-                <ol className="space-y-4">
-                  {data.summary.newsHighlights.map((item, i) => (
-                    <li key={item.title} className="flex gap-3">
-                      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-zinc-900 text-xs font-bold text-white dark:bg-zinc-100 dark:text-zinc-900">
-                        {i + 1}
-                      </span>
-                      <div>
-                        <p className="font-semibold">{item.title}</p>
-                        <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-                          {item.summary}
-                        </p>
-                      </div>
-                    </li>
-                  ))}
-                </ol>
-              </Card>
-            )}
-
-            <NewsList news={data.news} />
-          </div>
-        )
-      )}
-    </main>
+      <NewsList news={news} />
+    </div>
   );
 }
 
@@ -247,7 +169,7 @@ function Stat({ label, value }: { label: string; value: string }) {
   );
 }
 
-function LoadingSkeleton() {
+export function LoadingSkeleton() {
   return (
     <div className="animate-pulse space-y-6">
       <div className="h-36 rounded-2xl bg-zinc-200 dark:bg-zinc-800" />
@@ -256,18 +178,18 @@ function LoadingSkeleton() {
         <div className="h-64 rounded-2xl bg-zinc-200 dark:bg-zinc-800" />
       </div>
       <div className="h-80 rounded-2xl bg-zinc-200 dark:bg-zinc-800" />
-      <p className="text-center text-sm text-zinc-500">正在抓取資料並請 AI 整理，約需 10–20 秒…</p>
+      <p className="text-center text-sm text-zinc-500">載入寄信紀錄中…</p>
     </div>
   );
 }
 
-function formatDate(iso: string) {
+export function formatDate(iso: string) {
   const [, month, day] = iso.split("-");
   const weekday = "日一二三四五六"[new Date(`${iso}T00:00:00Z`).getUTCDay()];
   return `${Number(month)} 月 ${Number(day)} 日（${weekday}）`;
 }
 
-function formatTime(iso: string) {
+export function formatTime(iso: string) {
   return new Date(iso).toLocaleString("zh-TW", {
     timeZone: "Asia/Taipei",
     month: "numeric",
